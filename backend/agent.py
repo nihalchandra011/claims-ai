@@ -1,15 +1,14 @@
-from backend.web_search import ollama_web_search
-from backend.llm_local import local_llm_generate
 from backend.router import classify_question
-import concurrent.futures
+from backend.llm_local import local_llm_generate
+from backend.tools.tool_registry import TOOLS
 
 
 def build_prompt(context, question):
 
     prompt = f"""
-You are ClaimsAI, an expert healthcare claims and contract analyst.
+You are ClaimsAI, a healthcare claims and contracts expert.
 
-Explain clearly and use bullet points when helpful.
+Use the provided context to answer the question clearly.
 
 Context:
 {context}
@@ -23,36 +22,28 @@ Answer:
     return prompt
 
 
-def agent_answer(metadata: dict, user_question: str):
+def agent_answer(metadata: dict, question: str):
 
-    route = classify_question(user_question)
+    route = classify_question(question)
 
     context = ""
 
-    # CLAIM QUESTIONS
-    if route == "claims":
-        context = "Healthcare claims domain knowledge."
+    if route == "web_search":
 
-    # ERROR QUESTIONS
-    elif route == "errors":
-        context = "Healthcare claim rejection and denial analysis."
+        tool = TOOLS["web_search"]
+        context = tool(question)
 
-    # CONTRACT QUESTIONS
-    elif route == "contract":
-        context = "Healthcare payer-provider contracts."
+    elif route == "claim_tool":
 
-    # GENERAL QUESTIONS → WEB SEARCH
-    else:
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        tool = TOOLS["claim_parser"]
+        context = tool(metadata)
 
-            search_future = executor.submit(
-                ollama_web_search,
-                user_question
-            )
+    elif route == "contract_tool":
 
-            context = search_future.result()
+        tool = TOOLS["contract_parser"]
+        context = tool(metadata)
 
-    prompt = build_prompt(context, user_question)
+    prompt = build_prompt(context, question)
 
     answer = local_llm_generate(prompt)
 
