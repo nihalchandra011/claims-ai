@@ -1,0 +1,18 @@
+# Core UI / parsing
+streamlit
+pandas
+
+# File format extraction
+pdfplumber
+python-docx
+pytesseract
+Pillow
+
+# X12 EDI parsing
+x12-edi-tools
+
+# HTTP + web search support
+requests
+
+# Ollama Python integration
+ollama
