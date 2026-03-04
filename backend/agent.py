@@ -1,35 +1,23 @@
 from backend.web_search import ollama_web_search
 from backend.llm_local import local_llm_generate
+from backend.router import classify_question
 import concurrent.futures
 
 
-def build_prompt(metadata: dict, user_question: str, search_context: str):
-
-    context = ""
-
-    if search_context:
-        context = search_context[:600]
-
-    if metadata:
-        context += f"\nClaim Data: {metadata}"
+def build_prompt(context, question):
 
     prompt = f"""
-You are ClaimsAI, an expert healthcare claims and contracts analyst.
+You are ClaimsAI, an expert healthcare claims and contract analyst.
 
-Explain concepts clearly like a senior healthcare data analyst mentoring a junior analyst.
-
-Use:
-- clear explanations
-- bullet points
-- examples when useful
+Explain clearly and use bullet points when helpful.
 
 Context:
 {context}
 
 Question:
-{user_question}
+{question}
 
-Provide a clear explanation:
+Answer:
 """
 
     return prompt
@@ -37,23 +25,35 @@ Provide a clear explanation:
 
 def agent_answer(metadata: dict, user_question: str):
 
-    safe_query = user_question
+    route = classify_question(user_question)
 
-    if metadata.get("procedure_codes"):
-        safe_query += " " + " ".join(metadata["procedure_codes"])
+    context = ""
 
-    # PARALLEL SEARCH
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    # CLAIM QUESTIONS
+    if route == "claims":
+        context = "Healthcare claims domain knowledge."
 
-        search_future = executor.submit(
-            ollama_web_search,
-            safe_query
-        )
+    # ERROR QUESTIONS
+    elif route == "errors":
+        context = "Healthcare claim rejection and denial analysis."
 
-        search_context = search_future.result()
+    # CONTRACT QUESTIONS
+    elif route == "contract":
+        context = "Healthcare payer-provider contracts."
 
-    prompt = build_prompt(metadata, user_question, search_context)
+    # GENERAL QUESTIONS → WEB SEARCH
+    else:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+
+            search_future = executor.submit(
+                ollama_web_search,
+                user_question
+            )
+
+            context = search_future.result()
+
+    prompt = build_prompt(context, user_question)
 
     answer = local_llm_generate(prompt)
 
-    return answer
+    return answer.strip()
